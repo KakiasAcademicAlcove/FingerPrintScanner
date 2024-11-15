@@ -1,8 +1,8 @@
 #include <Adafruit_Fingerprint.h>
 #include <SoftwareSerial.h>
-#include <Base64.h>  // Base64 library
+#include <Base64.h>  
 
-SoftwareSerial mySerial(2, 3);  // RX, TX for fingerprint sensor
+SoftwareSerial mySerial(2, 3);  // ports on the arduino for connection
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
 void setup() {
@@ -13,7 +13,7 @@ void setup() {
     Serial.println("Fingerprint sensor found.");
   } else {
     Serial.println("Fingerprint sensor not found.");
-    while (1);  // Halt if sensor is not found
+    while (1);  // wait if sensor is not found
   }
 }
 
@@ -39,7 +39,7 @@ void sendFingerprintTemplate() {
         return;
       }
 
-      delay(2000);  // Wait for the second scan
+      delay(2000);  // small delay for the second scan
 
       Serial.println("Place finger on sensor again...");
       while (finger.getImage() != FINGERPRINT_OK) {
@@ -61,10 +61,10 @@ void sendFingerprintTemplate() {
         Serial.println("BEGIN");
 
         // Sending model data in chunks
-        uint8_t model[534]; // 534 bytes is typical for template size
+        uint8_t model[534]; // template size
         finger.getModel();  // Prepare data to be read
         for (int i = 0; i < 534; i++) {
-          model[i] = mySerial.read();  // Collect raw bytes
+          model[i] = mySerial.read();  // Collect the bytes
         }
 
         // Base64 encode full data
@@ -76,7 +76,7 @@ void sendFingerprintTemplate() {
         Serial.println("FINISH");
       } else {
         Serial.println("Failed to retrieve fingerprint model data.");
-        sendFingerprintTemplate();  // Retry
+        sendFingerprintTemplate();  // Retry if fail
       }
       return;
     } else {
