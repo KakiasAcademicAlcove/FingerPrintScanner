@@ -27,9 +27,11 @@ class scanner:
             self.arduino = None
             
     def start(self):
-        starting = input("Do you want to enroll a finger? y/yes ").lower()
-        if starting == "yes" or starting == "y":
+        starting = input("Do you want to enroll a finger? 'enroll/e' or verify 'verify/v' ".upper()).lower()
+        if starting == "enroll" or starting == "e":
             self.sendCommand()
+        elif starting == "verify" or starting == "v":
+            self.verify_finger()
         else:
             print("Exiting...")
             return
@@ -58,7 +60,7 @@ class scanner:
                     # with open("finger_data.yaml", "a") as file:
                     #         yaml.dump({name + string_id: encryptedData}, file, default_flow_style=False)
                     #         yaml.dump("\n")
-                    print(f"saved fingerprint for {name} to database ".upper())
+                    
                 elif fingerData == "Failed to create fingerprint model.":
                     self.sendCommand()
                 else:
@@ -66,7 +68,7 @@ class scanner:
                 break
             
             elif outcome:
-                print(f"Arduino output: {outcome}")
+                print(f"Arduino output: {outcome}".upper())
                     
             else:
                 # print("No outcome from the Arduino.")
@@ -114,6 +116,12 @@ class scanner:
         if self.arduino.is_open:
             self.arduino.close()
 
+# result = self.cursor.fetchone()
+#         if result[0] > 0:
+#             print(f"name {name} is already taken please enter a new one")
+#             new_name = input("enter new name ")
+#             self.save_to_database(new_name, encrypted_data, time)
+
     def save_to_database(self,encrypted_data, name):
         if self.db.is_connected():
             print("SYSTEM IS CONNECTED TO THE DATABASE TO SAVE ")
@@ -127,27 +135,81 @@ class scanner:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+
+        self.cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (name,))
+        result = self.cursor.fetchone()
+
+        while result[0] > 0:
+            print(f"username {name} has already been used, choose another ".upper())
+            name = input("enter new name: ")
+            self.cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (name,))
+            result = self.cursor.fetchone()
+
         time = datetime.now(timezone.utc)  
         command = "INSERT INTO users (username, encrypted_fingerprint, created_at) VALUES (%s, %s, %s)"
         values = (name, encrypted_data, time)
         self.cursor.execute(command , values)
         self.db.commit()
+        print(f"fingerprint for {name} has been saved successfully".upper())
         
 
 
-    def verify_finger(self, fingerprint):
-        pass
+    def display_finger(self):
+        confirm = self.verify_finger()
+        answer = confirm.decode().strip()
+        print(answer)
+
+
+    def verify_finger(self):
+        command = "VERIFY_FINGER\n"
+        print(f"Sending command: {command.strip()}")
+        self.arduino.write(command.encode())  # Send the command as bytes
+        time.sleep(0.5)
+        print("Waiting for fingerprint scan...")
+
+        if not self.arduino.is_open:
+            self.arduino.open()
+        
+
+        # print("we are at the while true bit with serial being read")
+        while True:
+            outcome = self.arduino.readline().decode("utf-8").strip()
+            
+            if outcome == "BEGIN":
+                fingerData = self.readFinger()
+                if fingerData:
+                    print("we are in the part where if we have finger data returned =========")
+                    print("Fingerprint scanned for verification.")
+                    encrypted_scanned_data = self.cipher_suite.encrypt(fingerData)
+
+                    # Retrieve all stored fingerprints from the database
+                    self.cursor.execute("SELECT username, encrypted_fingerprint FROM users")
+                    users = self.cursor.fetchall()
+
+                    for username, stored_data in users:
+                        if encrypted_scanned_data == stored_data:
+                            print(f"Fingerprint match found! User: {username}")
+                            return True
+                    print("No match found.")
+                    self.start()
+                else:
+                    print("Failed to scan fingerprint.")
+                    return False
+            elif outcome:
+                print(f"Arduino output: {outcome}")
+            else:
+                time.sleep(0.1)
 
 # Instantiate and run
 run = scanner()
 run.start()
-run.closeSerial()
+# run.closeSerial()
 
 
+    # def closeSerial(self):
+    #     if self.arduino.is_open:
+    #         self.arduino.close()
 
 
-
-# To decrypt later:
-# decrypted_data = cipher_suite.decrypt(encrypted_data)
 
 
