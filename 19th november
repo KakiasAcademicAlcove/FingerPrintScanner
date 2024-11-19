@@ -1,0 +1,2 @@
+the error of not being able to read the data with both methods in has been fixed, i believe it was due to buffer being overrun. fixed this with a chunking method rather 
+than all data at once. next step is to get this verifying method working correctly. it only seems to recognise one single fingerprint.
