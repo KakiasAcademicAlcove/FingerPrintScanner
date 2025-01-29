@@ -271,7 +271,7 @@ class Scanner:
         num_of_chunks = (len(stored_print) // chunk_size) + 1
         print(f"Waiting for Arduino to be ready...")
 
-        # Wait for Arduino to say "READY"
+        # Wait for Arduino to say ready
         while True:
             reply = self.arduino.readline().strip().decode()
             if reply == "READY":
@@ -285,17 +285,17 @@ class Scanner:
             end = (i + 1) * chunk_size
             chunk_data = stored_print[start:end]
 
-            if self.arduino.write(chunk_data):  # Send chunk
+            if self.arduino.write(chunk_data): 
                 print(f"Sent chunk {i + 1}/{num_of_chunks}")
                 
 
-            time.sleep(0.1)  # Short delay for stability
+            time.sleep(0.1)  
 
-        # Send "END" to indicate full fingerprint is sent
+        # Send end to tell us full fingerprint is sent
         self.arduino.write(b"END")
         print("Sent END signal to Arduino")
 
-        # Wait for Arduino to confirm receipt
+        # Wait for Arduino to confirm it has it
         while True:
             response = self.arduino.readline().strip().decode()
             if response == "RECEIVED":
