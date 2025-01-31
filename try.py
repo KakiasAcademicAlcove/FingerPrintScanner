@@ -7,11 +7,6 @@ import mysql.connector
 from datetime import datetime, timezone
 
 
-
-#this needs to have functions that can retrive each print and save them in a variable then also a function to send them to the arduino/n
-# maybe have some if statement that makes it wait for the ardunio to say no match before sending the next one ? that way it can dynamically load and compare  
-
-
 class Scanner:
     def __init__(self):
             
