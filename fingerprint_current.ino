@@ -30,17 +30,16 @@ void loop() {
     if (command) {
       if (command == "VERIFY_FINGER"){
       Serial.println("Starting verification...");
-      // verify_finger();
-      // compareTemplate();
       store_template();
-      
-      // Serial.println("we are here");
+      delay(1000);
+      getFingerprintID();
+      delay(1000);
+      deleteit();
     } else if (command == "SCAN_FINGER") {
       Serial.println("scanning finger now...");
       sendFingerprintTemplate();
     } else if (command == "READ"){
-      Serial.println("going to the read function");
-      // read();
+      deleteit();
     } 
     else {
       Serial.println("Invalid command. Failed to go to a method.");
@@ -59,15 +58,15 @@ void clearSerialBuffer() {
 }
 
 
-
 //original one
 void sendFingerprintTemplate() {
   
   while (true) {
-    int result = finger.getImage();
-    if (result == FINGERPRINT_OK) {
-      Serial.println("fingerprint found successfully");
-      
+    // int result = finger.getImage();
+    while (finger.getImage() != FINGERPRINT_OK) {
+      Serial.println("fingerprint not found");
+      delay(10);
+    }
 
     if (finger.image2Tz(1) != FINGERPRINT_OK) {
       Serial.println("Failed to convert image to template.");
@@ -79,7 +78,7 @@ void sendFingerprintTemplate() {
     
     while (finger.getImage() != FINGERPRINT_OK) {
       Serial.println("Place finger on sensor again...");
-      // delay(400);
+      // delay(10);
     }
     
 
@@ -92,7 +91,7 @@ void sendFingerprintTemplate() {
     delay(2000);
     while(finger.getImage() != FINGERPRINT_OK){
       Serial.println("place finger on sensor again please");
-      // delay(400);
+      // delay(10);
     }
 
     if (finger.image2Tz(3) != FINGERPRINT_OK){
@@ -105,9 +104,9 @@ void sendFingerprintTemplate() {
 
     while(finger.getImage() != FINGERPRINT_OK){
       Serial.println("place finger on sensor again please");
-      // delay(400);
+      // delay(10);
     }
-
+    
     if (finger.image2Tz(4) != FINGERPRINT_OK){
       Serial.println("fingerprint failed to convert");
       return;
@@ -116,29 +115,34 @@ void sendFingerprintTemplate() {
     int a = finger.createModel();
     if (a != FINGERPRINT_OK) {
       Serial.println("Failed to create fingerprint model.");
+      Serial.println(a);
       delay(1000);
       continue;  // Retry
     }
-    finger.storeModel(a);
-    Serial.println("stored the print");
+    int id = 0;
+    int next = id++;
 
-    int w = finger.getModel();
-    // Serial.println(w);
-    if (w == FINGERPRINT_OK) {
+    finger.storeModel(1);
+    finger.getTemplateCount();
+    Serial.println(finger.templateCount);
+
+    a = finger.getModel();
+    
+    if (a == FINGERPRINT_OK) {
       Serial.println("BEGIN");
-
+      
       // Sending model data in chunks
       uint8_t model[512]; // template size
-      if (w == 0);{  // Prepare data to be read
+      if (a == 0){  // Prepare data to be read
       for (int i = 0; i < 512; i++) {
         model[i] = mySerial.read();  // Collect the bytes
-        // Serial.print(w);
+        
         }
       }
 
       for (int i = 0; i < 512; i++) {
         Serial.write(model[i]);  // Send raw bytes one by one
-        // Serial.println(model[i], HEX);
+        delay(10);
       }
 
       delay(1600);
@@ -148,240 +152,221 @@ void sendFingerprintTemplate() {
       sendFingerprintTemplate();  // Retry if fail
     }
     return;
-    }
-      else {
-      Serial.println("No finger detected. Retrying...");
-      // delay(50);
-    }
+    
   
 }
 }
 
+
+
 void store_template() {
-    Serial.println("READY");  // Notify Python that Arduino is ready
-    
-    uint8_t buffer[512];  // Buffer for fingerprint data
-    int index = 0;
-    String receivedData = "";  // Store incoming data to check for "END"
+      // Notify Python that Arduino is ready
+      delay(10);
+      Serial.println("READY");
+      Serial.flush();
+      uint8_t buffer[512];  // Buffer for fingerprint data
+      int index = 0;
+      bool receiving = true;  // Flag to indicate receiving data
+      
+      // Serial.println("Waiting for fingerprint data...");
+      while (receiving) {  // Keep reading bytes until newline is detected
+          if (Serial.available() > 0) {  
+              uint8_t c = Serial.read();  // Read a byte
 
-    while (true) {  
-        if (Serial.available() > 0) {  
-            uint8_t c = Serial.read();  
-            // if(Serial.read() == "ready"){
-            //   Serial.println("READY");
-            //   Serial.flush();
-            // } 
-            buffer[index++] = c;         
-            receivedData += (char)c;     
+              // Stop receiving if newline character is detected
+              if (c == '\n') {
+                  
+                  receiving = false;  // Stop reading data
+                  Serial.println("");
+                  Serial.println(index);
+                  delay(2000);
+                  
+                  Serial.println(" ");
+                  Serial.print("received lines: ");
+                  for (int i = 0; i < index; i++){
+                        Serial.write(buffer[i]);
+                      }
+                  
 
-            // Stop receiving if we detect "END" at the end
-            if (receivedData.endsWith("END")) {
-                Serial.println("RECEIVED");  // Notify Python that data is received
-                Serial.print("Buffer content: ");
+                  Serial.println("Fingerprint received!");
+                  Serial.println(" ");
+                  delay(100);
 
-                // Print fingerprint data in hex format
-                for (int i = 0; i < index - 3; i++) {  // Ignore "END"
-                    Serial.print(buffer[i], HEX);
-                    Serial.print(" ");
+                  uint8_t result = finger.createModel();
+                  if (result != FINGERPRINT_OK) {
+                  Serial.print("Failed to create fingerprint model!");
+                  return;  // Exit if model creation fails
+                  }
+
+                  result = finger.storeModel(buffer);
+                  if (result == FINGERPRINT_OK) {
+                      Serial.println("Fingerprint successfully uploaded to the scanner!");
+                  } 
+                  
+                  int id = finger.getTemplateCount() + 1;
+                  result = finger.storeModel(id);
+                  if (result != FINGERPRINT_OK){
+                    Serial.print("couldn't save print in the sensor");
+                    return;
+                  }
+                  else{
+                    Serial.println("saved the print");
+                  }
+
+                  delay(700);
+                  finger.getTemplateCount();
+                  Serial.println(finger.templateCount);
+
+
+                  // Notify Python that fingerprint was received and stored
+                  Serial.println("RECEIVED");
+                  Serial.println("STORED");
+                  Serial.println(finger.templateCount);
+                  delay(1500);
+                  memset(buffer, 0, sizeof(buffer));
+                  index = 0;
+                  
                 }
-                Serial.println();
-                Serial.println("hello");
-                if (Serial.read() == "stop"){
-                  break; } // Stop receiving data
-            }
 
-            // Prevent overflow
-            if (index >= sizeof(buffer)) {
-                Serial.println("ERROR: Buffer overflow!");
-                break;
-            }
-        }
-        // Serial.print(sizeof(buffer));
-        delay(10);
+              // Store only if there's space
+              if (index <= sizeof(buffer)) {
+                  buffer[index++] = c;
+                  // Serial.print(index);
+                  // delay(10);
+              
+              } else if(index > sizeof(buffer)){
+                Serial.println("you fucked up index is too big");
+                return;
+              }
+                else {
+                  Serial.print(" ERROR: Buffer overflow!");
+                  return;
+              }
+              
+          }
+
+          delay(10);  // Small delay to allow buffer processing
+      
     }
 }
 
+uint8_t getFingerprintID() {
+  clearSerialBuffer();
+  delay(1000);
+  Serial.println("now comparing the print");
+  bool running = true;
 
-// void store_template() {
-//     Serial.println("We are in the store method");
-    
-//     uint8_t buffer[515];  // Array to store fingerprint data (assuming 512 bytes)
-//     int index = 0;        // To keep track of where you are in the array
-//     String receivedData = ""; // Store incoming data as a string to check for "END"
+  while (running){
+    if (Serial.available() > 0){
+      String lines = Serial.readStringUntil('\n');
+      if (lines == "continue"){
 
-//     while (true) {  // Infinite loop until "END" is found
-//         if (Serial.available() > 0) {  // Check if data is available
-//             uint8_t c = Serial.read();   // Read one byte from Serial
-//             buffer[index++] = c;         // Append it to the buffer
-//             receivedData += (char)c; 
-//             Serial.println(receivedData);    // Append to the string
-
-//             // Stop receiving if we detect "END" at the end
-//             if (receivedData.endsWith("END")) {
-//                 Serial.println("End of data detected!");
-//                 Serial.print("Buffer content: ");
-
-//                 // Print the buffer content in hexadecimal format
-//                 for (int i = 0; i < index - 3; i++) {  // Ignore "END" bytes
-//                     Serial.print(buffer[i], HEX);
-//                     Serial.print(" ");
-//                 }
-            
-//                 Serial.println();
-//                 break;  // Exit the loop after receiving the full data
-//             }
-
-//             // Prevent overflow
-//             if (index > sizeof(buffer)) {
-//                 Serial.println("Buffer overflow! Too much data.");
-//                 break;
-//             }
-//         }
-//         delay(10);  // Optional delay to prevent excessive CPU usage
-//     }
-// }
-
-
-
-
-
-
-
-// void compareTemplate(){
-//   if (!templateUploaded){
-//     sentTemplates();
-//   }
-
-//   if (templateUploaded){
-//     Serial.println("place finger on scanner ");
-
-//     if (finger.getImage() == FINGERPRINT_OK){
-//       Serial.println("image taken");
-//     }
-//     while (finger.image2Tz(1) != FINGERPRINT_OK){
-//       Serial.println("couldnt take image");
-//       delay(200);
-//     }
-    
-//     if (finger.fingerFastSearch() == FINGERPRINT_OK){
-//       Serial.println("match found");
-//     }
-//     if (finger.loadModel(2) == FINGERPRINT_OK){
-//       Serial.println("template loaded into buffer");
-
-//       int match = finger.fingerFastSearch();
-
-//       if (match == FINGERPRINT_OK){
-//         Serial.println("match found");
-//       }
-//       else{
-//         Serial.println("nothing found to match ");
-//       }
-//     } else{
-//       Serial.println("failed to load template");
-//     }
-
-//   }
-// }
-
-// void sentTemplates() {
-//   Serial.println("Waiting to receive template from Python...");
-//   receivedBytes = 0;
-
-//   while (receivedBytes < templateSize) {
-//     if (Serial.available()) {
-//       templateBuffer[receivedBytes++] = Serial.read();
-//     }
-//   }
-
-//   if (receivedBytes == templateSize) {
-//     Serial.println("Template received. Uploading to sensor...");
-//     if (finger.loadModel(templateBuffer) == FINGERPRINT_OK) {
-//       Serial.println("Template uploaded successfully.");
-//       templateUploaded = true;
-//     } else {
-//       Serial.println("Failed to upload template.");
-//       templateUploaded = false;
-//     }
-//   }
-// }
-
-
-
-
-void verify_finger() {
-    clearSerialBuffer();
-    Serial.println("Inside verify_finger() method");
-    delay(500);
-    String recieved_print = "";
-    // stored_print = "";
-    Serial.println("we are just before the while loop");
-    while (true){
-      if (Serial.available() > 0){
-        String c = Serial.readStringUntil("\n");
-        delay(700);
-        Serial.println("we are after the serial read");
-        if (c == '\n'){
-          Serial.print("recieved so far");
-          Serial.println(recieved_print +'\n');
-          Serial.println("print recieved");
-          delay(100);
-
-          // if (store_template(recieved_print,2)){
-          //   Serial.println("template loaded into memory");
-
-            while (true){
-              Serial.println("place finger on the sensor");
-              int result = finger.getImage();
-              if (result == "FINGERPRINT_OK"){
-                Serial.println("scan was a success");
-
-                if (finger.image2Tz(1) == FINGERPRINT_OK){
-                  int match = finger.fingerFastSearch();
-                  if (match == "FINGERPRINT_OK"){
-                    Serial.println("MATCH");
-                  }
-                  else{
-                    Serial.println("NO PRINT FOUND");
-                  }
-                  break;
-                }else{
-                  Serial.println("couldnt convert template");
-                }
-              }
-              else{
-                Serial.println("NO PRINT FOUND");
-              } delay(500);
-            }
-          }
-          else{
-            Serial.println("no template loaded");
-          } recieved_print = "";
-            break;
+        while (finger.getImage() != FINGERPRINT_OK){
+          Serial.println("place finger on the sensor...");
+          delay(50);
         }
-        // else{
-        //   recieved_print += c;
-        // }
+
+        if (finger.image2Tz() == FINGERPRINT_OK){
+          Serial.println("image made");
+        }
+
+        if (finger.fingerSearch() == FINGERPRINT_OK) {
+          Serial.println("Found a print match!");
+          Serial.print("Found ID #"); Serial.print(finger.fingerID);
+          Serial.print(" with confidence of "); Serial.println(finger.confidence);
+          Serial.println("END");
+        }
+        else {
+          Serial.println("INTRUDER");
+        }
+
+        // found a match!
+        
+        running = false;
+
+        return finger.fingerID;
       }
     }
-    
+  }
+}
+
+
+// uint8_t getFingerprintID() {
+//     delay(1000);
+//     Serial.println("Now comparing the print");
+
+//     // Wait for input
+//     if (Serial.available() > 0) {
+//         String input = Serial.readStringUntil('\n'); // Read the full input line
+        
+//         if (input == "c") { // Check if input is 'c'
+//             bool answer = true;
+            
+//             while (answer) {
+//                 uint8_t p = finger.getImage();
+//                 if (p != FINGERPRINT_OK) {
+//                     Serial.println("Place finger on the sensor...");
+//                     delay(50);
+//                     continue;
+//                 }
+
+//                 p = finger.image2Tz();
+//                 if (p != FINGERPRINT_OK) {
+//                     Serial.println("Error converting image!");
+//                     continue;
+//                 }
+
+//                 Serial.println("Image made!");
+
+//                 // Search for a match
+//                 p = finger.fingerSearch();
+//                 if (p == FINGERPRINT_OK) {
+//                     Serial.print("Found ID #"); 
+//                     Serial.print(finger.fingerID);
+//                     Serial.print(" with confidence of "); 
+//                     Serial.println(finger.confidence);
+//                     Serial.println("END");
+//                     return finger.fingerID;  // Return valid ID
+//                 } else {
+//                     Serial.println("INTRUDER DETECTED!");
+//                     return 0xFF;  // Return invalid ID if no match
+//                 }
+//             }
+//         }
+//     }
+
+//     return 0xFF;  // Return invalid ID if no input received
 // }
 
 
+// returns -1 if failed, otherwise returns ID #
+// int getFingerprintIDez() {
+//   uint8_t p = finger.getImage();
+//   if (p != FINGERPRINT_OK)  return -1;
 
-// uint8_t deleteit(){
-//   uint8_t result = finger.emptyDatabase();
+//   p = finger.image2Tz();
+//   if (p != FINGERPRINT_OK)  return -1;
+
+//   p = finger.fingerFastSearch();
+//   if (p != FINGERPRINT_OK)  return -1;
+
+//   // found a match!
+//   Serial.print("Found ID #"); Serial.print(finger.fingerID);
+//   Serial.print(" with confidence of "); Serial.println(finger.confidence);
+//   return finger.fingerID;
+// }  
+
+
+
+uint8_t deleteit(){
+  uint8_t result = finger.emptyDatabase();
 
 // if (result == FINGERPRINT_OK) {
 //     Serial.println("All fingerprints deleted.");
 // } else {
 //     Serial.println("Failed to clear fingerprint database.");
 // }
-// }
-
-
-
-
+}
 
 
 
